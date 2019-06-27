@@ -37,20 +37,17 @@ PKG_CONFIG ?= pkg-config
 PREFIX ?= /usr/local
 SED ?= sed
 TAR ?= tar
-XBUILD ?= xbuild
+MSBUILD ?= msbuild
 
 export MONO_PREFIX ?= /usr
 MODE ?= Debug
 
 ifeq ($(MODE), Debug)
-	override xb_mode = net_4_0_Debug
 	override mono_opt = --debug
 
 	FSHARPC_FLAGS += --debug+
 	MCS_FLAGS += -debug
 else
-	override xb_mode = net_4_0_Release
-
 	FSHARPC_FLAGS += --optimize
 	MCS_FLAGS += -optimize
 endif
@@ -58,7 +55,7 @@ endif
 FSHARPC_FLAGS += --nologo --warnaserror
 GENDARME_FLAGS += --severity all --confidence all
 MCS_FLAGS += -langversion:experimental -unsafe -warnaserror
-XBUILD_FLAGS += /nologo /property:Configuration=$(xb_mode) /verbosity:quiet
+MSBUILD_FLAGS += /nologo /property:Configuration=$(MODE) /verbosity:quiet
 
 FSHARPC_TEST_FLAGS += --debug+ --nologo --warnaserror
 MCS_TEST_FLAGS += -debug -langversion:experimental -unsafe -warnaserror
@@ -117,7 +114,7 @@ clean-check:
 	$(RM) $(tests)
 
 clean-deps:
-	$(CD) dep/debugger-libs && $(XBUILD) $(XBUILD_FLAGS) /target:Clean
+	$(CD) dep/debugger-libs && $(MSBUILD) $(MSBUILD_FLAGS) /target:Clean debugger-libs.sln
 
 clean-release:
 	$(RM) -r rel
@@ -129,11 +126,15 @@ install: $(addprefix bin/, $(results))
 	$(INSTALL) -m755 -d $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/ICSharpCode.NRefactory.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/ICSharpCode.NRefactory.CSharp.dll $(PREFIX)/lib/sdb
+	$(INSTALL) -m755 bin/Microsoft.CodeAnalysis.dll $(PREFIX)/lib/sdb
+	$(INSTALL) -m755 bin/Microsoft.CodeAnalysis.CSharp.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/Mono.Cecil.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/Mono.Cecil.Mdb.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/Mono.Debugger.Soft.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/Mono.Debugging.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/Mono.Debugging.Soft.dll $(PREFIX)/lib/sdb
+	$(INSTALL) -m755 bin/System.Collections.Immutable.dll $(PREFIX)/lib/sdb
+	$(INSTALL) -m755 bin/System.Reflection.Metadata.dll $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/sdb.exe $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 bin/sdb.exe.config $(PREFIX)/lib/sdb
 	$(INSTALL) -m755 -d $(PREFIX)/bin
@@ -144,34 +145,49 @@ release: rel/sdb.tar.gz
 uninstall:
 	$(RM) $(PREFIX)/lib/sdb/ICSharpCode.NRefactory.dll
 	$(RM) $(PREFIX)/lib/sdb/ICSharpCode.NRefactory.CSharp.dll
+	$(RM) $(PREFIX)/lib/sdb/Microsoft.CodeAnalysis.dll
+	$(RM) $(PREFIX)/lib/sdb/Microsoft.CodeAnalysis.CSharp.dll
 	$(RM) $(PREFIX)/lib/sdb/Mono.Cecil.dll
 	$(RM) $(PREFIX)/lib/sdb/Mono.Cecil.Mdb.dll
 	$(RM) $(PREFIX)/lib/sdb/Mono.Debugger.Soft.dll
 	$(RM) $(PREFIX)/lib/sdb/Mono.Debugging.dll
 	$(RM) $(PREFIX)/lib/sdb/Mono.Debugging.Soft.dll
+	$(RM) $(PREFIX)/lib/sdb/System.Collections.Immutable.dll
+	$(RM) $(PREFIX)/lib/sdb/System.Reflection.Metadata.dll
 	$(RM) $(PREFIX)/lib/sdb/sdb.exe
 	$(RM) $(PREFIX)/lib/sdb/sdb.exe.config
 	$(RM) $(PREFIX)/bin/sdb
 
 override refs = \
-	ICSharpCode.NRefactory.dll \
-	ICSharpCode.NRefactory.CSharp.dll \
-	Mono.Cecil.dll \
-	Mono.Cecil.Mdb.dll \
-	Mono.Debugger.Soft.dll \
 	Mono.Debugging.dll \
 	Mono.Debugging.Soft.dll
 
-$(addprefix bin/, $(refs)):
-	$(CD) dep/debugger-libs && $(NUGET) restore && $(XBUILD) $(XBUILD_FLAGS) debugger-libs.sln
+override deps = \
+	ICSharpCode.NRefactory.dll \
+	ICSharpCode.NRefactory.CSharp.dll \
+	Microsoft.CodeAnalysis.CSharp.dll \
+	Microsoft.CodeAnalysis.dll \
+	Mono.Cecil.dll \
+	Mono.Cecil.Mdb.dll \
+	Mono.Debugger.Soft.dll \
+	System.Collections.Immutable.dll \
+	System.Reflection.Metadata.dll \
+	$(refs)
+
+$(addprefix bin/, $(deps)):
+	$(CD) dep/debugger-libs && $(NUGET) restore debugger-libs.sln && $(MSBUILD) $(MSBUILD_FLAGS) debugger-libs.sln
 	$(MKDIR) -p bin
-	$(CP) dep/nrefactory/bin/Debug/ICSharpCode.NRefactory.dll \
+	$(CP) dep/nrefactory/bin/$(MODE)/ICSharpCode.NRefactory.dll \
 		bin/ICSharpCode.NRefactory.dll
-	$(CP) dep/nrefactory/bin/Debug/ICSharpCode.NRefactory.CSharp.dll \
+	$(CP) dep/nrefactory/bin/$(MODE)/ICSharpCode.NRefactory.CSharp.dll \
 		bin/ICSharpCode.NRefactory.CSharp.dll
-	$(CP) dep/cecil/bin/$(xb_mode)/Mono.Cecil.dll \
+	$(CP) dep/debugger-libs/packages/Microsoft.CodeAnalysis.Common.1.3.2/lib/net45/Microsoft.CodeAnalysis.dll \
+		bin/Microsoft.CodeAnalysis.dll
+	$(CP) dep/debugger-libs/packages/Microsoft.CodeAnalysis.CSharp.1.3.2/lib/net45/Microsoft.CodeAnalysis.CSharp.dll \
+		bin/Microsoft.CodeAnalysis.CSharp.dll
+	$(CP) dep/debugger-libs/packages/Mono.Cecil.0.10.0-beta6/lib/net40/Mono.Cecil.dll \
 		bin/Mono.Cecil.dll
-	$(CP) dep/cecil/bin/$(xb_mode)/Mono.Cecil.Mdb.dll \
+	$(CP) dep/debugger-libs/packages/Mono.Cecil.0.10.0-beta6/lib/net40/Mono.Cecil.Mdb.dll \
 		bin/Mono.Cecil.Mdb.dll
 	$(CP) dep/debugger-libs/Mono.Debugger.Soft/bin/Debug/Mono.Debugger.Soft.dll \
 		bin/Mono.Debugger.Soft.dll
@@ -179,6 +195,10 @@ $(addprefix bin/, $(refs)):
 		bin/Mono.Debugging.dll
 	$(CP) dep/debugger-libs/Mono.Debugging.Soft/bin/Debug/Mono.Debugging.Soft.dll \
 		bin/Mono.Debugging.Soft.dll
+	$(CP) dep/debugger-libs/packages/System.Collections.Immutable.1.3.1/lib/netstandard1.0/System.Collections.Immutable.dll \
+		bin/System.Collections.Immutable.dll
+	$(CP) dep/debugger-libs/packages/System.Reflection.Metadata.1.4.2/lib/netstandard1.1/System.Reflection.Metadata.dll \
+		bin/System.Reflection.Metadata.dll
 
 override srcs = \
 	src/Options.cs \
@@ -230,7 +250,7 @@ override srcs = \
 	src/State.cs \
 	src/Utilities.cs
 
-bin/sdb.exe: mono.snk $(srcs) $(addprefix bin/, $(refs))
+bin/sdb.exe: mono.snk $(srcs) $(addprefix bin/, $(deps))
 	$(MCS) $(MCS_FLAGS) -keyfile:$< -lib:bin -out:$@ -target:exe -r:Mono.Posix $(addprefix -r:, $(refs)) $(srcs)
 
 bin/sdb.exe.config: sdb.exe.config
@@ -253,7 +273,7 @@ chk/check.exe: chk/check.fs mono.snk
 override artifacts = \
 	README.md \
 	LICENSE \
-	$(addprefix bin/, $(refs)) \
+	$(addprefix bin/, $(deps)) \
 	bin/sdb.exe \
 	bin/sdb.exe.config
 
